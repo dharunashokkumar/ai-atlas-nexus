@@ -43,6 +43,7 @@ class InferenceEngine(ABC):
         ] = None,
         backend: Literal["default", "mellea"] = BackendType.DEFAULT,
         concurrency_limit: int = 10,
+        auto_download_model: bool = True,
     ):
         """Create an instance of the InferenceEngine using the `model_name_or_path` and chosen LLM service.
 
@@ -51,12 +52,14 @@ class InferenceEngine(ABC):
             credentials (Optional[Union[Dict, InferenceEngineCredentials]], optional): credentials for the inference engine instance. Defaults to None.
             parameters (Optional[ Union[ RITSInferenceEngineParams, WMLInferenceEngineParams, OllamaInferenceEngineParams, VLLMInferenceEngineParams, ] ], optional): parameters to use during request generation. Defaults to None.
             concurrency_limit (int, optional): No of parallel calls to be made to the LLM service. Defaults to 10.
+            auto_download_model (bool, optional): Automatically download the OLLAMA model if it does not exist. Not applicable to RITS and WML. Default to True.
         """
 
         self.model_name_or_path = model_name_or_path
         self.credentials = self.prepare_credentials(credentials or {})
         self.parameters = self._check_if_parameters_are_valid(parameters or {})
         self.concurrency_limit = concurrency_limit
+        self.auto_download_model = auto_download_model
 
         # Create inference client
         self.client = self.create_client()
@@ -66,7 +69,7 @@ class InferenceEngine(ABC):
             self.ping()
         except Exception as e:
             raise Exception(
-                f"Failed to create `{self._inference_engine_type}` inference engine. Reason - {str(e)}"
+                f"Failed to create `{self._inference_engine_type}` inference engine. {str(e)}"
             )
 
         # Create inference backend
