@@ -115,7 +115,7 @@ class OllamaInferenceEngineParams(TypedDict):
     top_logprobs: Optional[int] = None
 
     # enable or disable model thinking
-    think: Optional[Union[bool, Literal["low", "medium", "high"]]] = (None,)
+    think: Optional[Union[bool, Literal["low", "medium", "high"]]] = False
 
 
 class VLLMInferenceEngineParams(TypedDict):
