@@ -1,6 +1,7 @@
+import asyncio
 import os
 from functools import partial
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Union
 
 from dotenv import load_dotenv
 
@@ -14,7 +15,13 @@ from ai_atlas_nexus.blocks.inference.params import (
 )
 from ai_atlas_nexus.blocks.inference.postprocessing import postprocess
 from ai_atlas_nexus.exceptions import InferenceError
-from ai_atlas_nexus.metadata_base import InferenceEngineType
+from ai_atlas_nexus.metadata_base import BackendType, InferenceEngineType
+from ai_atlas_nexus.toolkit.async_utils import (
+    ClientCache,
+    generate_batch_async,
+    get_current_event_loop,
+    run_async_in_thread,
+)
 from ai_atlas_nexus.toolkit.job_utils import (
     run_parallel,
     unwrap_arguments_and_call_func,
@@ -55,7 +62,28 @@ class OllamaInferenceEngine(InferenceEngine):
     def create_client(self):
         from ollama import Client
 
-        return Client(host=self.credentials["api_url"])
+        # Initialize sync client for setup operations (ping, pull, list)
+        client = Client(host=self.credentials["api_url"])
+
+        # Initialize async client cache for thread-safe async operations
+        self.async_client_cache = ClientCache(capacity=2)
+
+        # Pre-populate the cache by accessing the async client once
+        _ = self.async_client
+
+        return client
+
+    @property
+    def async_client(self):
+        from ollama import AsyncClient
+
+        key = id(get_current_event_loop())
+
+        cached_client = self.async_client_cache.get(key)
+        if cached_client is None:
+            cached_client = AsyncClient(host=self.credentials["api_url"])
+            self.async_client_cache.put(key, cached_client)
+        return cached_client
 
     def ping(self):
         try:
@@ -68,9 +96,18 @@ class OllamaInferenceEngine(InferenceEngine):
         if self.model_name_or_path not in [
             model.model for model in self.client.list().models
         ]:
-            LOGGER.info(f"Model `{self.model_name_or_path}` not found. Downloading...")
-            self._pull_model(self.model_name_or_path)
-            LOGGER.info(f"Successfully downloaded model `{self.model_name_or_path}`")
+            if self.auto_download_model:
+                LOGGER.info(
+                    f"Model `{self.model_name_or_path}` not found. Downloading..."
+                )
+                self._pull_model(self.model_name_or_path)
+                LOGGER.info(
+                    f"Successfully downloaded model `{self.model_name_or_path}`"
+                )
+            else:
+                raise Exception(
+                    f"Model `{self.model_name_or_path}` not found. Please download it using: `ollama pull {self.model_name_or_path}`"
+                )
 
         if "think" in self.parameters and self.parameters["think"]:
             if not "thinking" in self.client.show(self.model_name_or_path).capabilities:
@@ -96,7 +133,7 @@ class OllamaInferenceEngine(InferenceEngine):
                         print(f"{progress.status}: {percent:.2f}% done", end="\r")
         except Exception as e:
             raise Exception(
-                f"Error pulling model '{model_name_or_path}': {str(e)}. You can manually download it using: `ollama pull {model_name_or_path}`"
+                f"Error pulling model '{model_name_or_path}' - {str(e)}. You can manually download it using `ollama pull {model_name_or_path}`"
             )
 
     @postprocess
@@ -108,24 +145,31 @@ class OllamaInferenceEngine(InferenceEngine):
         verbose=True,
     ) -> List[TextGenerationInferenceOutput]:
         try:
-            return [
-                self._prepare_prediction_output(response)
-                for response in run_parallel(
-                    func=partial(
-                        unwrap_arguments_and_call_func,
-                        partial(self.backend.generate_text, response_format),
-                    ),
-                    items=prompts,
-                    desc=f"Inferring with {self._inference_engine_type}, backend - {self.backend._backend_type.upper()}",
-                    concurrency_limit=self.concurrency_limit,
-                    verbose=verbose,
-                )
-            ]
+            run_args = {
+                "func": partial(
+                    unwrap_arguments_and_call_func,
+                    partial(self.backend.generate_text, response_format),
+                ),
+                "items": prompts,
+                "desc": f"Inferring with {self._inference_engine_type}, backend - {self.backend._backend_type.upper()}",
+                "concurrency_limit": self.concurrency_limit,
+                "verbose": verbose,
+            }
+
+            if self.backend._backend_type == BackendType.DEFAULT:
+                # Run batch operation in the dedicated event loop using asyncio.
+                # Native OLLAMA AsyncClient has much faster response time with asyncio
+                responses = run_async_in_thread(generate_batch_async(**run_args))
+            else:
+                # Run batch operation using ThreadPoolExecutor for other backends
+                responses = run_parallel(**run_args)
+
+            return [self._prepare_prediction_output(response) for response in responses]
         except Exception as e:
             raise InferenceError(str(e))
 
-    def generate_text(self, response_format, prompt):
-        return self.client.generate(
+    async def generate_text(self, response_format, prompt):
+        return await self.async_client.generate(
             model=self.model_name_or_path,
             prompt=prompt,
             format=self.format(response_format),
@@ -154,28 +198,34 @@ class OllamaInferenceEngine(InferenceEngine):
         verbose: bool = True,
     ) -> TextGenerationInferenceOutput:
         try:
-            return [
-                self._prepare_prediction_output(response)
-                for response in run_parallel(
-                    func=partial(
-                        unwrap_arguments_and_call_func,
-                        partial(
-                            self.backend.generate_chat_response, response_format, tools
-                        ),
+            run_args = {
+                "func": partial(
+                    unwrap_arguments_and_call_func,
+                    partial(
+                        self.backend.generate_chat_response, response_format, tools
                     ),
-                    items=self._validate_chat_messages(messages),
-                    desc=f"Inferring with {self._inference_engine_type}, backend - {self.backend._backend_type.upper()}",
-                    concurrency_limit=self.concurrency_limit,
-                    verbose=verbose,
-                )
-            ]
+                ),
+                "items": self._validate_chat_messages(messages),
+                "desc": f"Inferring with {self._inference_engine_type}, backend - {self.backend._backend_type.upper()}",
+                "concurrency_limit": self.concurrency_limit,
+                "verbose": verbose,
+            }
+
+            if self.backend._backend_type == BackendType.DEFAULT:
+                # Run batch operation in the dedicated event loop using asyncio.
+                # Native OLLAMA AsyncClient has much faster response time with asyncio
+                responses = run_async_in_thread(generate_batch_async(**run_args))
+            else:
+                # Run batch operation using ThreadPoolExecutor for other backends
+                responses = run_parallel(**run_args)
+
+            return [self._prepare_prediction_output(response) for response in responses]
         except Exception as e:
             raise InferenceError(str(e))
 
-    def generate_chat_response(
-        self, response_format, tools, messages
-    ) -> List[TextGenerationInferenceOutput]:
-        return self.client.chat(
+    async def generate_chat_response(self, response_format, tools, messages):
+        """Async version of generate_chat_response using AsyncClient."""
+        return await self.async_client.chat(
             model=self.model_name_or_path,
             messages=self._to_openai_format(messages),
             tools=tools,
