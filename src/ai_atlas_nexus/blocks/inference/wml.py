@@ -95,9 +95,6 @@ class WMLInferenceEngine(InferenceEngine):
         else:
             client.set.default_project(self.credentials["project_id"])
 
-        # self.parameters.update(
-        #     {"response_format": self._create_schema_format(response_format)}
-        # )
         return ModelInference(
             model_id=self.model_name_or_path, api_client=client, params=self.parameters
         )
@@ -114,8 +111,6 @@ class WMLInferenceEngine(InferenceEngine):
         postprocessors: List[str] = None,
         verbose=True,
     ) -> List[TextGenerationInferenceOutput]:
-        responses = []
-
         try:
             return [
                 self._prepare_prediction_output(response)
@@ -136,12 +131,13 @@ class WMLInferenceEngine(InferenceEngine):
     def generate_text(
         self, response_format, prompt: str
     ) -> List[TextGenerationInferenceOutput]:
-        for response in self.client.generate(
-            prompt=[prompt],
-            params=self.parameters,
-            concurrency_limit=self.concurrency_limit,
-        ):
-            return response
+        # for response in self.client.generate(
+        #     prompt=[prompt],
+        #     params=self.parameters,
+        #     concurrency_limit=self.concurrency_limit,
+        # ):
+        #     return response
+        return self.generate_chat_response(response_format, None, prompt)
 
     @postprocess
     def chat(

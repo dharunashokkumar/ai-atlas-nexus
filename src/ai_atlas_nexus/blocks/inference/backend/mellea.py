@@ -135,9 +135,11 @@ class MelleaInferenceBackend(InferenceBackend):
             if isinstance(self.session.backend, OpenAIBackend):
                 return ChatCompletion(**response_thunk._meta["oai_chat_response"])
             elif "oai_chat_response" in response_thunk._meta:
-                return {"choices": [response_thunk._meta["oai_chat_response"]]}
-            else:
+                return response_thunk._meta["oai_chat_response"]
+            elif "chat_response" in response_thunk._meta:
                 return response_thunk._meta["chat_response"]
+            else:
+                return ""
 
         except Exception as e:
             raise RuntimeError(f"Mellea text generation failed: {str(e)}")
