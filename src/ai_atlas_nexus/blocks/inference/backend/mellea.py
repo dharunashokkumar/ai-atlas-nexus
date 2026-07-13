@@ -145,14 +145,14 @@ class MelleaInferenceBackend(InferenceBackend):
             raise RuntimeError(f"Mellea text generation failed: {str(e)}")
 
     def generate_chat_response(
-        self, format: type[BaseModel], tools: bool, messages: str
+        self, format: type[BaseModel], tools: bool, message: str
     ) -> str:
         """Generate a Mellea chat response. It is a lighter-weight alternative that sends a plain message with no requirements and no sampling strategy
 
         Args:
             format (type[BaseModel]): If set, the BaseModel to use for constrained decoding. Defaults to None.
             tools (bool): If true, tool calling is enabled in mellea. Default to False.
-            messages (str): The description of the instruction.
+            message (str): The description of the instruction.
 
         Returns:
             str: a str chat response
@@ -163,11 +163,11 @@ class MelleaInferenceBackend(InferenceBackend):
             )
 
         try:
-            if not isinstance(messages, str):
+            if not isinstance(message, str):
                 raise Exception("Mellea chat input should always be a plain string.")
 
             response_thunk = self.session.chat(
-                content=messages,
+                content=message,
                 format=format,
                 model_options=self.model_options,
                 tool_calls=bool(tools),
