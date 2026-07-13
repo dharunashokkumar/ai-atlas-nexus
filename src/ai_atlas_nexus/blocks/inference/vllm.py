@@ -121,7 +121,7 @@ class VLLMInferenceEngine(InferenceEngine):
                             unwrap_arguments_and_call_func,
                             partial(self.backend.generate_text, response_format),
                         ),
-                        items=prompts,
+                        items=self._validate_generate_messages(prompts),
                         desc=f"Inferring with {self._inference_engine_type}, backend - {self.backend._backend_type.upper()}",
                         concurrency_limit=self.concurrency_limit,
                         verbose=verbose,
@@ -142,7 +142,7 @@ class VLLMInferenceEngine(InferenceEngine):
                 return [
                     self._prepare_prediction_output(response)
                     for response in self.client.generate(
-                        prompts=prompts,
+                        prompts=self._validate_generate_prompts(prompts),
                         sampling_params=SamplingParams(**self.parameters),
                         use_tqdm=verbose,
                     )

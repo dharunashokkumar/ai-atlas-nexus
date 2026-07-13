@@ -213,3 +213,8 @@ class MelleaInferenceParams(TypedDict, total=False):
     prefix: Optional[str] = None
     grounding_context: Optional[dict[str, str]] = None
     requirements: Optional[list[str]] = None
+
+
+ValidGenerateCompletionMessageParam: TypeAlias = Union[
+    List[str], List[MelleaInferenceParams]
+]

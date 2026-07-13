@@ -13,6 +13,7 @@ from ai_atlas_nexus.blocks.inference.params import (
     RITSInferenceEngineParams,
     TextGenerationInferenceOutput,
     ValidChatCompletionMessageParam,
+    ValidGenerateCompletionMessageParam,
     ValidListChatCompletionMessageParam,
     VLLMInferenceEngineParams,
     WMLInferenceEngineParams,
@@ -22,6 +23,16 @@ from ai_atlas_nexus.toolkit.logging import configure_logger
 
 
 logger = configure_logger(__name__)
+
+
+def isListEmpty(inList):
+    if isinstance(inList, List):
+        if len(inList) == 0:
+            return True
+        else:
+            return any(map(isListEmpty, inList))
+    else:
+        return False
 
 
 class InferenceEngine(ABC):
@@ -116,17 +127,22 @@ class InferenceEngine(ABC):
                 f"Invalid input message format. Please use openai format or plain str."
             )
 
+    def _validate_generate_prompts(self, prompts):
+        error_message = (
+            "Input should be of valid type: List[str], List[MelleaInferenceParams]"
+        )
+
+        try:
+            if isListEmpty(prompts):
+                raise ValueError
+
+            TypeAdapter(ValidGenerateCompletionMessageParam).validate_python(prompts)
+            return prompts
+        except ValidationError:
+            raise Exception(error_message)
+
     def _validate_chat_messages(self, messages):
         error_message = "Input should be of valid type: str, List[str], OpenAIChatCompletionMessageParam, List[OpenAIChatCompletionMessageParam]"
-
-        def isListEmpty(inList):
-            if isinstance(inList, List):
-                if len(inList) == 0:
-                    return True
-                else:
-                    return any(map(isListEmpty, inList))
-            else:
-                return False
 
         try:
             if isListEmpty(messages):
