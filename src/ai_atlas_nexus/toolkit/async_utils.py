@@ -58,18 +58,22 @@ class _EventLoopHandler:
         if self._event_loop:
             try:
                 tasks = asyncio.all_tasks(self._event_loop)
-                for task in tasks:
-                    task.cancel()
+                if tasks:
+                    for task in tasks:
+                        task.cancel()
 
-                async def finalize_tasks() -> None:
-                    await asyncio.gather(*tasks, return_exceptions=True)
+                    async def finalize_tasks() -> None:
+                        await asyncio.gather(*tasks, return_exceptions=True)
 
-                out = asyncio.run_coroutine_threadsafe(
-                    finalize_tasks(), self._event_loop
-                )
+                    out = asyncio.run_coroutine_threadsafe(
+                        finalize_tasks(), self._event_loop
+                    )
 
-                # Timeout if needed.
-                out.result(5)
+                    # Wait for finalization to complete with timeout
+                    try:
+                        out.result(timeout=5)
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
