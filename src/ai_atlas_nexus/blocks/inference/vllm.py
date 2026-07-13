@@ -121,7 +121,7 @@ class VLLMInferenceEngine(InferenceEngine):
                             unwrap_arguments_and_call_func,
                             partial(self.backend.generate_text, response_format),
                         ),
-                        items=self._validate_generate_messages(prompts),
+                        items=self._validate_generate_prompts(prompts),
                         desc=f"Inferring with {self._inference_engine_type}, backend - {self.backend._backend_type.upper()}",
                         concurrency_limit=self.concurrency_limit,
                         verbose=verbose,
@@ -207,7 +207,8 @@ class VLLMInferenceEngine(InferenceEngine):
                     self._prepare_prediction_output(response)
                     for response in self.client.chat(
                         messages=[
-                            self._to_openai_format(message) for message in messages
+                            self._to_openai_format(message)
+                            for message in self._validate_chat_messages(messages)
                         ],
                         sampling_params=SamplingParams(**self.parameters),
                         use_tqdm=verbose,
