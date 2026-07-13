@@ -132,22 +132,22 @@ class InferenceEngine(ABC):
             "Input should be of valid type: List[str], List[MelleaInferenceParams]"
         )
 
-        try:
-            if isListEmpty(prompts):
-                raise ValueError
+        if isListEmpty(prompts):
+            raise ValueError(error_message)
 
+        try:
             TypeAdapter(ValidGenerateCompletionMessageParam).validate_python(prompts)
             return prompts
         except ValidationError:
-            raise Exception(error_message)
+            raise ValueError(error_message)
 
     def _validate_chat_messages(self, messages):
         error_message = "Input should be of valid type: str, List[str], OpenAIChatCompletionMessageParam, List[OpenAIChatCompletionMessageParam]"
 
-        try:
-            if isListEmpty(messages):
-                raise ValueError
+        if isListEmpty(messages):
+            raise ValueError(error_message)
 
+        try:
             TypeAdapter(ValidChatCompletionMessageParam).validate_python(messages)
             return [messages]
         except ValidationError:
@@ -157,9 +157,7 @@ class InferenceEngine(ABC):
                 )
                 return messages
             except ValidationError:
-                raise Exception(error_message)
-        except ValueError:
-            raise Exception(error_message)
+                raise ValueError(error_message)
 
     def ping(self):
         # Implement inference engine specific ping in their respective class.
