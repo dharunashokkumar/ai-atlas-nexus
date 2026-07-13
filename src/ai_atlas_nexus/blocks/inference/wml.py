@@ -131,12 +131,6 @@ class WMLInferenceEngine(InferenceEngine):
     def generate_text(
         self, response_format, prompt: str
     ) -> List[TextGenerationInferenceOutput]:
-        # for response in self.client.generate(
-        #     prompt=[prompt],
-        #     params=self.parameters,
-        #     concurrency_limit=self.concurrency_limit,
-        # ):
-        #     return response
         return self.generate_chat_response(response_format, None, prompt)
 
     @postprocess
