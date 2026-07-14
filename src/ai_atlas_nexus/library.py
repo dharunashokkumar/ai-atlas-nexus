@@ -351,7 +351,7 @@ class AIAtlasNexus:
             tag=tag,
             id=id,
             name=name,
-            taxonomy=taxonomy,
+            isDefinedByTaxonomy=taxonomy,
         )
         if risk and len(risk) > 0:
             risk = risk[0]
@@ -411,6 +411,8 @@ class AIAtlasNexus:
             risk = cls.get_risk(id=id)
         elif tag:
             risk = cls.get_risk(tag=tag)
+        elif name:
+            risk = cls.get_risk(name=name)
 
         # just get all the related risks from the risk, these should have been added during lifting
         options = [
@@ -424,7 +426,8 @@ class AIAtlasNexus:
         related_risk_instances = [
             risk_instance
             for risk_instance in [
-                cls.get_risk(id=x, apply_rules=apply_rules) for x in related_risk_ids
+                cls.get_risk(id=x, taxonomy=taxonomy, apply_rules=apply_rules)
+                for x in related_risk_ids
             ]
             if risk_instance is not None
         ]
@@ -1455,6 +1458,8 @@ class AIAtlasNexus:
 
         if risk_id:
             risk = cls.get_risk(id=risk_id)
+            if risk is None:
+                raise ValueError("Risk cannot be found: {0}".format(risk_id))
 
         related_evaluations = cls._atlas_explorer.query(
             "evaluations", hasRelatedRisk=risk.id, taxonomy=taxonomy
@@ -1972,7 +1977,7 @@ class AIAtlasNexus:
             "<RAN92358069E>",
             str,
             allow_none=False,
-            target_class=id,
+            target_class=target_class,
         )
         type_check(
             "<RAN61877043E>",
@@ -1981,7 +1986,9 @@ class AIAtlasNexus:
             taxonomy=taxonomy,
         )
 
-        instances: list[Any] = cls._atlas_explorer.get_instances(target_class, taxonomy)
+        instances: list[Any] = cls._atlas_explorer.get_all(
+            target_class, taxonomy=taxonomy
+        )
         return instances
 
     def identify_domain_from_usecases(
